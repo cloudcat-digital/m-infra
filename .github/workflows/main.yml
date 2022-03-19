@@ -1,0 +1,117 @@
+on:
+# tf plan should be triggered when a PR is opened
+#  pull_request:
+#    paths:
+#      - terraform/**
+#      - app/**
+
+# uncomment this section to trigger on a push to the master branch
+#  push:
+#    paths:
+#      - terraform/**
+#      - app/**
+#    branches:
+#      - main
+  # Platform infra should be versioned, so we can run terraform on every new release
+  # considering release are using tags, with the example format v0.1.0
+  create:
+    tags:
+      - v*
+
+name: 🏗️ Platform provisioning
+
+jobs:
+  platform-provisioning:
+    name: Creating ${{ matrix.context }}
+    runs-on: ubuntu-latest
+    strategy:
+      # This is the equivalent of a for loop, and we'll be using it to terraform our platform
+      # in a reusable way, with fewer lines of code
+      matrix:
+        context: [eks-cluster, core-networking, ecr-repos]
+      # We'd like to avoid parallel run for terraform, order matters
+      max-parallel: 1
+
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ github.token }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Terraform security gate
+        # tfsec uses static analysis of terraform templates to spot potential security issues.
+        # On each pull request and subsequent commit, tfsec will run and add comments to the PR where tfsec has failed.
+        uses: aquasecurity/tfsec-pr-commenter-action@v1.0.2
+        with:
+          github_token: ${{ github.token }}
+          working_directory: terraform/${{ matrix.context }}
+
+      # Install Dependencies
+      - name: Install aws-iam-authenticator
+        run: |
+          echo Installing aws-iam-authenticator...
+          mkdir ~/aws
+          curl -Lo ~/aws/aws-iam-authenticator \
+          "https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v0.5.5/aws-iam-authenticator_0.5.5_linux_amd64"
+          chmod +x ~/aws/aws-iam-authenticator
+          sudo cp ~/aws/aws-iam-authenticator /usr/local/bin/aws-iam-authenticator
+
+      - uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.1.4
+
+      - name: 🏗️ Destroying ${{ matrix.context }}
+        run: |
+          pushd terraform/${{ matrix.context }} && terraform init && terraform destroy -no-color -auto-approve && popd
+  #   TODO: Post the output of the platform provisioning on PR as a comment
+  #         Consider using atlantis when the team expands https://www.runatlantis.io/
+
+  app-image-creation:
+    needs: platform-provisioning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ github.token }}
+
+      # We'll use the short version of current commit's hash for tagging the image
+      - name: Set commit's hash outputs
+        id: vars
+        run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
+
+      - name: Check commit's hash
+        run: echo ${{ steps.vars.outputs.sha_short }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      #   TODO: - name: Consider linting, testing, extra security scanning here
+
+      - name: Build, tag, and push app image to Amazon ECR
+        working-directory: ${{ github.workspace }}/app
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: cloudcat/app
+          IMAGE_TAG: ${{ steps.vars.outputs.sha_short }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      #   TODO: Post the output of the app image status on PR as a comment
