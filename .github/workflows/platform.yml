@@ -1,0 +1,110 @@
+on:
+  pull_request:
+    paths:
+      - terraform/**
+  push:
+    paths:
+      - terraform/**
+    branches:
+      - main
+  # We'd like to keep track of infra versions, so we're running infra on every new release
+  # considering release are using tags, with the example format v0.1.0
+  create:
+    tags:
+      - v*
+
+name: 🏗️ Platform provisioning
+
+defaults:
+  run:
+    shell: bash
+    working-directory: terraform
+
+jobs:
+  platform-provisioning:
+    name: Creating ${{ matrix.context }}
+    runs-on: ubuntu-latest
+    strategy:
+      # This is the equivalent of a for loop, and we'll be using it to terraform our platform
+      # in a reusable way, with fewer lines of code
+      matrix:
+        context: [tf-state-files, core-networking, eks-cluster, ecr-repos, argocd]
+      # We'd like to avoid parallel run for terraform, order matters
+      max-parallel: 1
+
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: SCM Checkout
+        uses: actions/checkout@v2
+
+      - name: Terraform security gate
+        # tfsec uses static analysis of terraform templates to spot potential security issues.
+        # On each pull request and subsequent commit, tfsec will run and add comments to the PR where tfsec has failed.
+        uses: aquasecurity/tfsec-pr-commenter-action@v1.0.2
+        with:
+          github_token: ${{ github.token }}
+          working_directory: terraform/${{ matrix.context }}
+
+      # Install Dependencies
+      - name: Install aws-iam-authenticator
+        run: |
+          echo Installing aws-iam-authenticator...
+          mkdir ~/aws
+          curl -Lo ~/aws/aws-iam-authenticator \
+          "https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v0.5.5/aws-iam-authenticator_0.5.5_linux_amd64"
+          chmod +x ~/aws/aws-iam-authenticator
+          sudo cp ~/aws/aws-iam-authenticator /usr/local/bin/aws-iam-authenticator
+
+      - uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.1.4
+
+      - name: 🏗️ Terraforming ${{ matrix.context }}
+        run: |
+          pushd ${{ matrix.context }} && terraform init && terraform apply -no-color -auto-approve && popd
+
+#   TODO: Post the output of the platform provisioning on PR as a comment
+#         Consider using atlantis when the team expands https://www.runatlantis.io/
+#
+#  - uses: actions/github-script@v6
+#    if: github.event_name == 'pull_request'
+#    env:
+#      PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+#    with:
+#      github-token: ${{ secrets.GITHUB_TOKEN }}
+#      script: |
+#        const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+#        #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+#        #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+#        <details><summary>Validation Output</summary>
+#
+#        \`\`\`\n
+#        ${{ steps.validate.outputs.stdout }}
+#        \`\`\`
+#
+#        </details>
+#
+#        #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+#
+#        <details><summary>Show Plan</summary>
+#
+#        \`\`\`\n
+#        ${process.env.PLAN}
+#        \`\`\`
+#
+#        </details>
+#
+#        *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+#
+#        github.rest.issues.createComment({
+#          issue_number: context.issue.number,
+#          owner: context.repo.owner,
+#          repo: context.repo.repo,
+#          body: output
+#        })

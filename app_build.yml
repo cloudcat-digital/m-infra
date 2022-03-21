@@ -1,0 +1,55 @@
+#on:
+#  pull_request:
+#    paths:
+#      - app/**
+#  push:
+#    paths:
+#      - app/**
+#    branches:
+#      - main
+#
+#name: Build and Push to ECR
+#
+## https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+#env:
+#  AWS_DEFAULT_REGION: eu-west-1
+#  AWS_DEFAULT_OUTPUT: json
+#  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+#  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#  CONTAINER_IMAGE: example-eks:${{ github.sha }}
+#
+#jobs:
+#  build-and-push:
+#    name: Build and deploy
+#    runs-on: ubuntu-latest
+#    steps:
+#
+#      - name: Checkout
+#        uses: actions/checkout@master
+#
+#        # Steps here linting, testing, minification, etc would go here
+#
+#      - name: Setup ECR
+#        run: |
+#          # Login to AWS ECR
+#          $( aws ecr get-login --no-include-email )
+#
+#      - name: Build and tag the image
+#        run: |
+#          # Build and tag the image
+#          docker build \
+#            -t $CONTAINER_IMAGE \
+#            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$CONTAINER_IMAGE ./app
+#
+#      # Security gates
+#      #- name: Scan the image
+#      #  run: trivy $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$CONTAINER_IMAGE
+#
+#      # Only push to registry on master
+#      - name: Push
+#        if: github.ref == 'refs/heads/master'
+#        run: |
+#          # Push image to AWS ECR
+#          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$CONTAINER_IMAGE
+#
