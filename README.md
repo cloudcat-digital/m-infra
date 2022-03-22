@@ -3,9 +3,11 @@
 ## Context
 This repo provides a cloud native, event driven, scalable and integrated platform to deploy apps in a GitOps fashion.
 
+![workflow](./workflow.png)
+
 The platform requires an AWS and a Github account, and can be used out-of-the-box with minimal configuration.
 
-## Architectural decision
+## Architectural decisions
 
 1. We'll use the principle of infrastructure as code for all infrastructure changes. That means that all changes will need to be serialized as code or configuration that can be checked into a git repository.
 2. We'll use Hashicorp's Terraform tool to construct and apply our infrastructure changes. Terraform uses a declarative model for changes which we prefer.
