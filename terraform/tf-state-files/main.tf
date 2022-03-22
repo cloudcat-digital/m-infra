@@ -18,3 +18,5 @@ module "s3_bucket" {
   }
 
 }
+
+# TODO: set up dynamodb for terraform state locking

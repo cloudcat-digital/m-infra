@@ -17,11 +17,6 @@ on:
 
 name: 🏗️ Platform provisioning
 
-defaults:
-  run:
-    shell: bash
-    working-directory: terraform
-
 jobs:
   platform-provisioning:
     name: Creating ${{ matrix.context }}
@@ -35,15 +30,17 @@ jobs:
       max-parallel: 1
 
     steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ github.token }}
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: SCM Checkout
-        uses: actions/checkout@v2
 
       - name: Terraform security gate
         # tfsec uses static analysis of terraform templates to spot potential security issues.
@@ -69,26 +66,43 @@ jobs:
 
       - name: 🏗️ Terraforming ${{ matrix.context }}
         run: |
-          pushd ${{ matrix.context }} && terraform init && terraform apply -no-color -auto-approve && popd
+          pushd terraform/${{ matrix.context }} && terraform init && terraform apply -no-color -auto-approve && popd
+  #   TODO: Post the output of the platform provisioning on PR as a comment
+  #         Consider using atlantis when the team expands https://www.runatlantis.io/
 
   app-image-creation:
     needs: platform-provisioning
     runs-on: ubuntu-latest
 
     steps:
+      - name: SCM Checkout
+        uses: actions/checkout@v3
+        with:
+          token: ${{ github.token }}
+
       # We'll use the short version of current commit's hash for tagging the image
-      - name: Set outputs
+      - name: Set commit's hash outputs
         id: vars
         run: echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
 
-      - name: Check outputs
+      - name: Check commit's hash
         run: echo ${{ steps.vars.outputs.sha_short }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
+      #   TODO: - name: Consider linting, testing, extra security scanning here
+
       - name: Build, tag, and push app image to Amazon ECR
+        working-directory: ${{ github.workspace }}/app
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: cloudcat/app
@@ -97,42 +111,4 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-#   TODO: Post the output of the platform provisioning on PR as a comment
-#         Consider using atlantis when the team expands https://www.runatlantis.io/
-
-#  - uses: actions/github-script@v6
-#    if: github.event_name == 'pull_request'
-#    env:
-#      PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
-#    with:
-#      github-token: ${{ secrets.GITHUB_TOKEN }}
-#      script: |
-#        const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-#        #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
-#        #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
-#        <details><summary>Validation Output</summary>
-#
-#        \`\`\`\n
-#        ${{ steps.validate.outputs.stdout }}
-#        \`\`\`
-#
-#        </details>
-#
-#        #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-#
-#        <details><summary>Show Plan</summary>
-#
-#        \`\`\`\n
-#        ${process.env.PLAN}
-#        \`\`\`
-#
-#        </details>
-#
-#        *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
-#
-#        github.rest.issues.createComment({
-#          issue_number: context.issue.number,
-#          owner: context.repo.owner,
-#          repo: context.repo.repo,
-#          body: output
-#        })
+      #   TODO: Post the output of the app image status on PR as a comment
