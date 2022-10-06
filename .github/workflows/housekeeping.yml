@@ -2,7 +2,7 @@ name: Clean-up stale branches
 
 on:
   schedule:
-    - cron: '15 * * * *'
+    - cron: '* * * * *'
   push:
     branches:
       - 'main'
