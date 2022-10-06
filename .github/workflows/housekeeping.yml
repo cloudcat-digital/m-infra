@@ -1,38 +1,38 @@
-#name: Clean-up stale branches
-#
-#on:
-#  schedule:
-#    - cron: '0 * * * *'
-#  push:
-#    branches:
-#      - 'main'
-#
-#env:
-#  # Time to wait before deleting a branch with no activity (default: 1 month)
-#  # Git time format: https://git-scm.com/docs/git-log#Documentation/git-log.txt---sincelttimegt
-#  TIME_TO_WAIT: '1 minute ago'
+name: Clean-up stale branches
+
+on:
+  schedule:
+    - cron: '* * * * *'
+  push:
+    branches:
+      - 'main'
+
+env:
+  # Time to wait before deleting a branch with no activity (default: 1 month)
+  # Git time format: https://git-scm.com/docs/git-log#Documentation/git-log.txt---sincelttimegt
+  TIME_TO_WAIT: '1 minute ago'
 #  PROTECTED_BRANCHES: 'mobile/*|mobile/**|native-release-buildkite'
-#
-#jobs:
-#  housekeeping:
-#    name: Cleanup old branches
-#    runs-on: ubuntu-latest
-#
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v3
-#        with:
-#          token: ${{ github.token }}
-#          fetch-depth: 0
-#
-#      - name: Run delete-old-branches-action
-#        uses: site-assist/action-helpers-housekeeping@master
-#        with:
-#          repo_token: ${{ github.token }}
-#          date: ${{ env.TIME_TO_WAIT }}
-#          dry_run: true
-#          delete_tags: true
-#          minimum_tags: 5
-#          extra_protected_branch_regex: ${{ env.PROTECTED_BRANCHES }}
-#          extra_protected_tag_regex: '^v.*'
-#          exclude_open_pr_branches: true
+
+jobs:
+  housekeeping:
+    name: Cleanup old branches
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ github.token }}
+          fetch-depth: 0
+
+      - name: Run delete-old-branches-action
+        uses: site-assist/action-helpers-housekeeping@master
+        with:
+          repo_token: ${{ github.token }}
+          date: ${{ env.TIME_TO_WAIT }}
+          dry_run: true
+          delete_tags: true
+          minimum_tags: 5
+          #extra_protected_branch_regex: ${{ env.PROTECTED_BRANCHES }}
+          extra_protected_tag_regex: '^v.*'
+          exclude_open_pr_branches: true
