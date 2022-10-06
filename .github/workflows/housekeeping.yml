@@ -10,7 +10,7 @@ on:
 env:
   # Time to wait before deleting a branch with no activity (default: 1 month)
   # Git time format: https://git-scm.com/docs/git-log#Documentation/git-log.txt---sincelttimegt
-  TIME_TO_WAIT: '1 months ago'
+  TIME_TO_WAIT: '1 minute ago'
 
 jobs:
   housekeeping:
