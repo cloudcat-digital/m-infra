@@ -7,6 +7,11 @@ on:
     branches:
       - 'main'
 
+env:
+  # Time to wait before deleting a branch with no activity (default: 1 month)
+  # Git time format: https://git-scm.com/docs/git-log#Documentation/git-log.txt---sincelttimegt
+  TIME_TO_WAIT: '1 months ago'
+
 jobs:
   housekeeping:
     name: Cleanup old branches
@@ -23,7 +28,7 @@ jobs:
         uses: site-assist/action-helpers-housekeeping@master
         with:
           repo_token: ${{ github.token }}
-          date: '1 minutes ago'
+          date: ${{ env.TIME_TO_WAIT }}
           dry_run: true
           delete_tags: true
           minimum_tags: 5
